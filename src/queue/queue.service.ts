@@ -8,6 +8,14 @@ export class QueueService {
     constructor(@InjectQueue('jobs') private myQueue: Queue) { }
 
     async addQueue(job: Job) {
-        (await this.myQueue.add(job.type, { id: job.id, payload: job.payload }, { delay: 1000 }))
+        (await this.myQueue.add(job.type, { id: job.id, payload: job.payload },
+            {
+                delay: 1000,
+                attempts: 5,
+                backoff: {
+                    type: "exponential",
+                    delay: 5000
+                }
+            }))
     }
 }

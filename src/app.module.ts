@@ -8,6 +8,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { QueueService } from './queue/queue.service';
 import { QueueModule } from './queue/queue.module';
 import { LoggerService } from './logger.service';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -25,7 +26,8 @@ import { LoggerService } from './logger.service';
       },
       defaultJobOptions: { removeOnComplete: true }
     }),
-    QueueModule
+    QueueModule,
+    MailModule
   ],
   controllers: [AppController],
   providers: [AppService, LoggerService],

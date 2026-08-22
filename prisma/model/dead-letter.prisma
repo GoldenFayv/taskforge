@@ -1,0 +1,11 @@
+
+model DeadLetterJob {
+    id String @id @default(cuid())
+    jobId String @unique
+    type String
+    payload Json
+    error String?
+    attempts Int
+    failedAt DateTime @default(now())
+    job Job @relation(fields: [jobId], references: [id])
+}

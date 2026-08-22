@@ -6,6 +6,6 @@ enum JobStatus {
     COMPLETED
 
     FAILED
-    RETRY
+    RETRYING
     DEAD_LETTER
 }
