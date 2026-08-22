@@ -1,98 +1,324 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# TaskForge — Current Architecture
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+### 1. Overview
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+TaskForge is a background job processing system built with:
 
-## Description
+* NestJS
+* TypeScript
+* PostgreSQL
+* Prisma
+* Redis
+* BullMQ
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Its purpose is to accept jobs through an API, persist them, queue them for asynchronous processing, execute them using workers, retry failed jobs using exponential backoff, and move permanently failed jobs into a dead-letter queue.
 
-## Project setup
+### 2. Current architecture
 
-```bash
-$ npm install
+```text
+                    Client
+                      │
+                      │ POST /jobs
+                      ▼
+              ┌───────────────┐
+              │ JobsController│
+              └───────┬───────┘
+                      ▼
+               ┌─────────────┐
+               │ JobsService │
+               └──────┬──────┘
+                      │
+             ┌────────┴────────┐
+             ▼                 ▼
+       CreateJob Action    QueueService
+             │                 │
+             ▼                 ▼
+        PostgreSQL          BullMQ/Redis
+                                │
+                                ▼
+                         ProcessJobs Worker
+                                │
+                                ▼
+                         Job Processing
 ```
 
-## Compile and run the project
+### 3. Job creation
 
-```bash
-# development
-$ npm run start
+The API exposes:
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+```http
+POST /jobs
 ```
 
-## Run tests
+The request contains information such as:
 
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+```json
+{
+  "type": "send_email",
+  "payload": {
+    "to": "user@example.com"
+  }
+}
 ```
 
-## Deployment
+The flow is:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+```text
+POST /jobs
+   ↓
+JobsController
+   ↓
+JobsService
+   ↓
+CreateJob
+   ↓
+PostgreSQL
+   ↓
+QueueService
+   ↓
+BullMQ
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+The database record is created before the job is placed on the queue.
 
-## Resources
+### 4. Queue
 
-Check out a few resources that may come in handy when working with NestJS:
+BullMQ uses Redis as the queue backend.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+The application registers a queue named:
 
-## Support
+```text
+jobs
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+`QueueService` is responsible for adding jobs to this queue.
 
-## Stay in touch
+The queued job contains:
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+```typescript
+{
+  id: job.id,
+  payload: job.payload
+}
+```
 
-## License
+The BullMQ job name corresponds to the application's job type:
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+```text
+job.name → send_email
+```
+
+### 5. Worker
+
+`ProcessJobs` is the BullMQ worker.
+
+```typescript
+@Processor('jobs')
+export class ProcessJobs extends WorkerHost
+```
+
+It listens to the same `jobs` queue.
+
+When BullMQ gives it a job:
+
+```typescript
+async process(job: Job)
+```
+
+is executed.
+
+The worker currently:
+
+1. Receives the job.
+2. Gets the PostgreSQL job ID from `job.data.id`.
+3. Updates the database status to `PROCESSING`.
+4. Performs the job processing.
+5. Marks successful jobs as `COMPLETED`.
+6. Throws errors when processing fails.
+
+### 6. Job lifecycle
+
+The current lifecycle is:
+
+```text
+PENDING
+   ↓
+PROCESSING
+   ↓
+COMPLETED
+```
+
+Failure:
+
+```text
+PROCESSING
+   ↓
+RETRYING
+   ↓
+PROCESSING
+```
+
+After all retry attempts are exhausted:
+
+```text
+PROCESSING
+   ↓
+FAILED
+   ↓
+DEAD LETTER
+```
+
+### 7. Automatic retries
+
+BullMQ handles retrying jobs.
+
+The current configuration uses:
+
+```text
+Maximum attempts: 5
+Backoff: exponential
+Initial delay: 5 seconds
+```
+
+Conceptually:
+
+```text
+Attempt 1 → FAIL
+              ↓ 5s
+Attempt 2 → FAIL
+              ↓ 10s
+Attempt 3 → FAIL
+              ↓ 20s
+Attempt 4 → FAIL
+              ↓ 40s
+Attempt 5 → FAIL
+              ↓
+           FAILED
+```
+
+The application does not manually implement the retry loop.
+
+Instead, the worker throws an error and BullMQ manages the retry.
+
+### 8. Dead Letter Queue
+
+When a job exhausts its retry attempts, it is considered permanently failed.
+
+TaskForge persists information about the failed job in a `DeadLetterJob` table.
+
+The record contains information such as:
+
+```text
+jobId
+type
+payload
+error
+attempts
+failedAt
+```
+
+This allows permanently failed jobs to be inspected independently of Redis.
+
+### 9. Manual retry
+
+A dead-lettered job can be manually requeued through:
+
+```http
+POST /jobs/dead-letters/:id/retry
+```
+
+The retry process is:
+
+```text
+DeadLetterJob
+     ↓
+Find original Job
+     ↓
+Reset Job → PENDING
+     ↓
+Add Job back to BullMQ
+     ↓
+Delete DeadLetterJob
+     ↓
+Worker processes it again
+```
+
+### 10. Current module structure
+
+```text
+JobsModule
+│
+├── JobsController
+├── JobsService
+├── CreateJob
+├── ProcessJobs
+├── LoggerService
+│
+├── PrismaModule
+└── QueueModule
+       │
+       └── QueueService
+              │
+              └── BullMQ → Redis
+```
+
+The separation is intentional:
+
+**JobsModule**
+
+Owns the job domain and worker.
+
+**QueueModule**
+
+Owns communication with BullMQ/Redis.
+
+**CreateJob**
+
+Handles persistence of newly created jobs.
+
+**QueueService**
+
+Handles putting jobs into BullMQ.
+
+**ProcessJobs**
+
+Consumes and processes jobs.
+
+### 11. Features completed
+
+```text
+✅ Job creation
+✅ Job persistence
+✅ Redis/BullMQ queue
+✅ Background worker
+✅ Job status tracking
+✅ Processing status
+✅ Completed status
+✅ Failed status
+✅ Automatic retries
+✅ Exponential backoff
+✅ Dead-letter persistence
+✅ Manual dead-letter retry
+```
+
+### 12. What we haven't built yet
+
+The next major features can be:
+
+```text
+⬜ Job priorities
+⬜ Worker concurrency
+⬜ Multiple job types/processors
+⬜ Scheduled/delayed jobs
+⬜ Job cancellation
+⬜ Idempotency
+⬜ Job history
+⬜ Rate limiting
+⬜ Graceful worker shutdown
+⬜ Health checks
+⬜ Metrics
+⬜ Dashboard
+⬜ Authentication/authorization
+⬜ Docker deployment
+⬜ Horizontal worker scaling
+```

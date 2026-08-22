@@ -7,7 +7,7 @@ import { JobsService } from "./jobs.service";
 @Injectable()
 export class DeadLetterService {
     constructor(private prismaService: PrismaService, private retryDeadLetter: RetryDeadLetter, private jobService: JobsService) { }
-    async findAll() {
+    async findAllDeadLetters() {
         return await this.prismaService.deadLetterJob.findMany({
             orderBy: { failedAt: 'desc' },
             include: { job: true },
@@ -15,7 +15,7 @@ export class DeadLetterService {
         });
     }
     // <DeadLetterJob | null>
-    async findOne(id: string): Promise<Prisma.DeadLetterJobGetPayload<{ include: { job: true } }>> {
+    async findOneDeadLetter(id: string): Promise<Prisma.DeadLetterJobGetPayload<{ include: { job: true } }>> {
         const deadLetter = await this.prismaService.deadLetterJob.findUnique({
             where: { id },
             include: { job: true }
@@ -29,8 +29,10 @@ export class DeadLetterService {
     }
 
     async retry(id: string) {
-        const deadLetter = await this.findOne(id);
+        const deadLetter = await this.findOneDeadLetter(id);
+
         await this.jobService.updateJob(deadLetter.jobId, { status: JobStatus.PENDING })
+
         this.retryDeadLetter.handle(deadLetter)
 
         return deadLetter.job;
