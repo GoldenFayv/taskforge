@@ -1,0 +1,5 @@
+enum JobPriority {
+    HIGH
+    LOW
+    NORMAL
+}

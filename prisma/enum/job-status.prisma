@@ -1,0 +1,11 @@
+enum JobStatus {
+    PENDING
+    QUEUED
+    PROCESSING
+    SUCCESS
+    COMPLETED
+
+    FAILED
+    RETRY
+    DEAD_LETTER
+}

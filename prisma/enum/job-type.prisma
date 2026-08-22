@@ -1,0 +1,5 @@
+enum JobType {
+  EMAIL
+  REPORT
+  NOTIFICATION
+}
