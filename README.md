@@ -1,144 +1,229 @@
-# TaskForge — Current Architecture
+# TaskForge
 
-### 1. Overview
+A background job processing system built with **NestJS, BullMQ, Redis, PostgreSQL, and Prisma**.
 
-TaskForge is a background job processing system built with:
+TaskForge allows applications to create jobs, queue them for asynchronous processing, retry failed jobs with exponential backoff, and move permanently failed jobs into a dead-letter queue.
 
-* NestJS
-* TypeScript
+## Tech Stack
+
+* **NestJS** — Backend framework
+* **TypeScript** — Programming language
+* **PostgreSQL** — Persistent database
+* **Prisma** — ORM
+* **Redis** — Queue storage
+* **BullMQ** — Job queue and worker management
+
+---
+
+## Prerequisites
+
+Before running TaskForge, make sure you have the following installed:
+
+* Node.js 24+
+* npm
 * PostgreSQL
-* Prisma
 * Redis
-* BullMQ
+* Git
 
-Its purpose is to accept jobs through an API, persist them, queue them for asynchronous processing, execute them using workers, retry failed jobs using exponential backoff, and move permanently failed jobs into a dead-letter queue.
+You can verify your installations:
 
-### 2. Current architecture
-
-```text
-                    Client
-                      │
-                      │ POST /jobs
-                      ▼
-              ┌───────────────┐
-              │ JobsController│
-              └───────┬───────┘
-                      ▼
-               ┌─────────────┐
-               │ JobsService │
-               └──────┬──────┘
-                      │
-             ┌────────┴────────┐
-             ▼                 ▼
-       CreateJob Action    QueueService
-             │                 │
-             ▼                 ▼
-        PostgreSQL          BullMQ/Redis
-                                │
-                                ▼
-                         ProcessJobs Worker
-                                │
-                                ▼
-                         Job Processing
+```bash
+node -v
+npm -v
+psql --version
+redis-server --version
 ```
 
-### 3. Job creation
+---
 
-The API exposes:
+## 1. Clone the Repository
+
+```bash
+git clone <repository-url>
+```
+
+Navigate into the project:
+
+```bash
+cd taskforge
+```
+
+---
+
+## 2. Install Dependencies
+
+```bash
+npm install
+```
+
+---
+
+## 3. Configure Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+DATABASE_URL="postgresql://postgres:password@localhost:5432/taskforge"
+
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+PORT=3000
+```
+
+Replace the PostgreSQL credentials with the credentials for your local database.
+
+---
+
+## 4. Create the PostgreSQL Database
+
+Create a database named `taskforge`:
+
+```bash
+createdb taskforge
+```
+
+Alternatively, using PostgreSQL:
+
+```sql
+CREATE DATABASE taskforge;
+```
+
+Make sure the database URL in `.env` points to this database.
+
+Example:
+
+```env
+DATABASE_URL="postgresql://postgres:password@localhost:5432/taskforge"
+```
+
+---
+
+## 5. Start Redis
+
+TaskForge uses Redis as the storage layer for BullMQ.
+
+If Redis is installed locally:
+
+```bash
+redis-server
+```
+
+Verify that Redis is running:
+
+```bash
+redis-cli ping
+```
+
+You should receive:
+
+```text
+PONG
+```
+
+### Using Docker
+
+If you prefer Docker:
+
+```bash
+docker run --name taskforge-redis \
+  -p 6379:6379 \
+  -d redis
+```
+
+Then verify:
+
+```bash
+redis-cli ping
+```
+
+---
+
+## 6. Configure Prisma
+
+Generate the Prisma client:
+
+```bash
+npx prisma generate
+```
+
+Run the database migrations:
+
+```bash
+npx prisma migrate dev
+```
+
+If this is a fresh database, Prisma will create the required tables.
+
+---
+
+## 7. Start the Application
+
+For development:
+
+```bash
+npm run start:dev
+```
+
+The API should start on:
+
+```text
+http://localhost:3000
+```
+
+---
+
+## 8. Create a Job
+
+Create a job using:
 
 ```http
 POST /jobs
 ```
 
-The request contains information such as:
+Example request:
 
 ```json
 {
   "type": "send_email",
   "payload": {
-    "to": "user@example.com"
+    "to": "user@example.com",
+    "subject": "Welcome to TaskForge"
   }
 }
 ```
 
-The flow is:
+The request follows this flow:
 
 ```text
-POST /jobs
-   ↓
-JobsController
-   ↓
+API
+ ↓
 JobsService
-   ↓
-CreateJob
-   ↓
+ ↓
 PostgreSQL
-   ↓
-QueueService
-   ↓
+ ↓
 BullMQ
+ ↓
+Redis
+ ↓
+Worker
 ```
 
-The database record is created before the job is placed on the queue.
+---
 
-### 4. Queue
+## 9. Worker Processing
 
-BullMQ uses Redis as the queue backend.
+TaskForge uses a BullMQ worker to consume jobs from the `jobs` queue.
 
-The application registers a queue named:
-
-```text
-jobs
-```
-
-`QueueService` is responsible for adding jobs to this queue.
-
-The queued job contains:
-
-```typescript
-{
-  id: job.id,
-  payload: job.payload
-}
-```
-
-The BullMQ job name corresponds to the application's job type:
-
-```text
-job.name → send_email
-```
-
-### 5. Worker
-
-`ProcessJobs` is the BullMQ worker.
+The worker is registered with:
 
 ```typescript
 @Processor('jobs')
-export class ProcessJobs extends WorkerHost
 ```
 
-It listens to the same `jobs` queue.
+When a job is added to the queue, the worker automatically receives it.
 
-When BullMQ gives it a job:
-
-```typescript
-async process(job: Job)
-```
-
-is executed.
-
-The worker currently:
-
-1. Receives the job.
-2. Gets the PostgreSQL job ID from `job.data.id`.
-3. Updates the database status to `PROCESSING`.
-4. Performs the job processing.
-5. Marks successful jobs as `COMPLETED`.
-6. Throws errors when processing fails.
-
-### 6. Job lifecycle
-
-The current lifecycle is:
+The job lifecycle is:
 
 ```text
 PENDING
@@ -148,7 +233,7 @@ PROCESSING
 COMPLETED
 ```
 
-Failure:
+If processing fails:
 
 ```text
 PROCESSING
@@ -161,164 +246,217 @@ PROCESSING
 After all retry attempts are exhausted:
 
 ```text
-PROCESSING
-   ↓
 FAILED
    ↓
 DEAD LETTER
 ```
 
-### 7. Automatic retries
+---
 
-BullMQ handles retrying jobs.
+## 10. Automatic Retries
 
-The current configuration uses:
+TaskForge uses BullMQ's retry mechanism.
 
-```text
-Maximum attempts: 5
-Backoff: exponential
-Initial delay: 5 seconds
-```
+The current configuration allows:
 
-Conceptually:
+* Maximum attempts: **5**
+* Exponential backoff
+* Initial backoff delay: **5 seconds**
 
-```text
-Attempt 1 → FAIL
-              ↓ 5s
-Attempt 2 → FAIL
-              ↓ 10s
-Attempt 3 → FAIL
-              ↓ 20s
-Attempt 4 → FAIL
-              ↓ 40s
-Attempt 5 → FAIL
-              ↓
-           FAILED
-```
-
-The application does not manually implement the retry loop.
-
-Instead, the worker throws an error and BullMQ manages the retry.
-
-### 8. Dead Letter Queue
-
-When a job exhausts its retry attempts, it is considered permanently failed.
-
-TaskForge persists information about the failed job in a `DeadLetterJob` table.
-
-The record contains information such as:
+Example:
 
 ```text
-jobId
-type
-payload
-error
-attempts
-failedAt
+Attempt 1 → Failed
+      ↓ 5s
+Attempt 2 → Failed
+      ↓ 10s
+Attempt 3 → Failed
+      ↓ 20s
+Attempt 4 → Failed
+      ↓ 40s
+Attempt 5 → Failed
+      ↓
+Dead Letter
 ```
 
-This allows permanently failed jobs to be inspected independently of Redis.
+The worker throws an error when processing fails, allowing BullMQ to automatically handle the retry.
 
-### 9. Manual retry
+---
 
-A dead-lettered job can be manually requeued through:
+## 11. Dead Letter Jobs
+
+Jobs that fail all retry attempts are persisted as dead-letter jobs.
+
+Dead-letter jobs contain information such as:
+
+```text
+Job ID
+Job type
+Payload
+Error
+Number of attempts
+Failure timestamp
+```
+
+A dead-lettered job can be manually retried using:
 
 ```http
 POST /jobs/dead-letters/:id/retry
 ```
 
-The retry process is:
+The job is then returned to the normal queue-processing pipeline.
+
+---
+
+## Project Structure
 
 ```text
-DeadLetterJob
-     ↓
-Find original Job
-     ↓
-Reset Job → PENDING
-     ↓
-Add Job back to BullMQ
-     ↓
-Delete DeadLetterJob
-     ↓
-Worker processes it again
-```
-
-### 10. Current module structure
-
-```text
-JobsModule
+src/
+├── jobs/
+│   ├── action/
+│   │   ├── process-jobs.action.ts
+│   ├── ├── create-job.action.ts
+│   │   └── move-to-dead-letter.action.ts
+│   │
+│   ├── dto/
+│   │   └── creat-job.dto.ts
+│   │
+│   ├── jobs.controller.ts
+│   ├── jobs.module.ts
+│   ├── jobs.processor.ts
+│   └── jobs.service.ts
 │
-├── JobsController
-├── JobsService
-├── CreateJob
-├── ProcessJobs
-├── LoggerService
+├── queue/
+│   ├── queue.module.ts
+│   └── queue.service.ts
 │
-├── PrismaModule
-└── QueueModule
-       │
-       └── QueueService
-              │
-              └── BullMQ → Redis
+├── prisma/
+│   ├── prisma.module.ts
+│   └── prisma.service.ts
+│
+│—— app.module.ts
+└── main.ts
 ```
 
-The separation is intentional:
+---
 
-**JobsModule**
+## Development Commands
 
-Owns the job domain and worker.
+Start the application:
 
-**QueueModule**
+```bash
+npm run start
+```
 
-Owns communication with BullMQ/Redis.
+Start in development/watch mode:
 
-**CreateJob**
+```bash
+npm run start:dev
+```
 
-Handles persistence of newly created jobs.
+Build the project:
 
-**QueueService**
+```bash
+npm run build
+```
 
-Handles putting jobs into BullMQ.
+Run tests:
 
-**ProcessJobs**
+```bash
+npm run test
+```
 
-Consumes and processes jobs.
+Run Prisma migrations:
 
-### 11. Features completed
+```bash
+npx prisma migrate dev
+```
+
+Generate Prisma Client:
+
+```bash
+npx prisma generate
+```
+
+Open Prisma Studio:
+
+```bash
+npx prisma studio
+```
+
+---
+
+## Architecture
 
 ```text
-✅ Job creation
-✅ Job persistence
-✅ Redis/BullMQ queue
-✅ Background worker
-✅ Job status tracking
-✅ Processing status
-✅ Completed status
-✅ Failed status
-✅ Automatic retries
-✅ Exponential backoff
-✅ Dead-letter persistence
-✅ Manual dead-letter retry
+                    Client
+                      │
+                      ▼
+              ┌───────────────┐
+              │ JobsController│
+              └───────┬───────┘
+                      │
+                      ▼
+               ┌─────────────┐
+               │ JobsService │
+               └──────┬──────┘
+                      │
+             ┌────────┴────────┐
+             ▼                 ▼
+       PostgreSQL          QueueService
+                               │
+                               ▼
+                         BullMQ / Redis
+                               │
+                               ▼
+                         ProcessJobs
+                               │
+                               ▼
+                         Job Processing
+                               │
+                    ┌──────────┴──────────┐
+                    ▼                     ▼
+                COMPLETED               FAILED
+                                          │
+                                      RETRYING
+                                          │
+                                      max attempts
+                                          │
+                                          ▼
+                                    DEAD LETTER
 ```
 
-### 12. What we haven't built yet
+---
 
-The next major features can be:
+## Current Features
 
-```text
-⬜ Job priorities
-⬜ Worker concurrency
-⬜ Multiple job types/processors
-⬜ Scheduled/delayed jobs
-⬜ Job cancellation
-⬜ Idempotency
-⬜ Job history
-⬜ Rate limiting
-⬜ Graceful worker shutdown
-⬜ Health checks
-⬜ Metrics
-⬜ Dashboard
-⬜ Authentication/authorization
-⬜ Docker deployment
-⬜ Horizontal worker scaling
-```
+* Job creation
+* PostgreSQL job persistence
+* Redis/BullMQ queue
+* Background workers
+* Job status tracking
+* Automatic retries
+* Exponential backoff
+* Dead-letter jobs
+* Manual dead-letter retry
+
+## Roadmap
+* Job priorities
+* Worker concurrency
+* Multiple job processors
+* Scheduled jobs
+* Job cancellation
+* Idempotency
+* Rate limiting
+* Job history
+* Worker health checks
+* Metrics and monitoring
+* Web dashboard
+* Horizontal worker scaling
+* Dockerized deployment
+
+---
+
+## License
+
+This project is licensed under the MIT License.
