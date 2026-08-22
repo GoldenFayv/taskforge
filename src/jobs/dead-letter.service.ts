@@ -14,7 +14,7 @@ export class DeadLetterService {
             take: 50,
         });
     }
-    // <DeadLetterJob | null>
+    
     async findOneDeadLetter(id: string): Promise<Prisma.DeadLetterJobGetPayload<{ include: { job: true } }>> {
         const deadLetter = await this.prismaService.deadLetterJob.findUnique({
             where: { id },
@@ -28,13 +28,23 @@ export class DeadLetterService {
         return deadLetter;
     }
 
+    async deleteDeadLetter(id: string) {
+        await this.prismaService.deadLetterJob.delete({
+            where: { id }
+        })
+    }
+
     async retry(id: string) {
         const deadLetter = await this.findOneDeadLetter(id);
 
+        const job = deadLetter.job
+
         await this.jobService.updateJob(deadLetter.jobId, { status: JobStatus.PENDING })
 
-        this.retryDeadLetter.handle(deadLetter)
+        await this.retryDeadLetter.handle(deadLetter)
 
-        return deadLetter.job;
+        await this.deleteDeadLetter(id)
+
+        return job;
     }
 }

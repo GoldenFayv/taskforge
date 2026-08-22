@@ -7,5 +7,5 @@ model DeadLetterJob {
     error String?
     attempts Int
     failedAt DateTime @default(now())
-    job Job @relation(fields: [jobId], references: [id])
+    job Job @relation(fields: [jobId], references: [id], onDelete: Cascade, onUpdate:Cascade)
 }

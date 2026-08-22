@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateJobDto } from './dto/creat-job.dto';
-import { CreateJob } from './create-job.action';
+import { CreateJob } from './action/create-job.action';
 import { QueueService } from 'src/queue/queue.service';
 import { JobGetPayload } from 'src/generated/prisma/models';
 import { PrismaService } from 'src/prisma/prisma.service';

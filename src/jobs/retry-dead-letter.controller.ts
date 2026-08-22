@@ -1,11 +1,11 @@
-import { Controller, Param, ParseUUIDPipe, Post } from "@nestjs/common";
+import { Controller, Delete, Param, ParseUUIDPipe, Post } from "@nestjs/common";
 import { DeadLetterService } from "./dead-letter.service";
 
-@Controller('jobs/deadletter/:id/retry')
+@Controller('jobs/deadletters/:id/retry')
 export class RetryDeadLetterController{
     constructor(private deadLetterService: DeadLetterService){}
-    @Post()
-    async handle(@Param('id', ParseUUIDPipe) id: string){
-        return this.deadLetterService.retry(id)
+    @Delete()
+    async handle(@Param('id') id: string){
+        return await this.deadLetterService.retry(id)
     }
 }

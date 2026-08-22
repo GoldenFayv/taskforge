@@ -7,6 +7,7 @@ export class JobsController {
     constructor(private jobsService: JobsService){}
     @Post()
     store(@Body() data: CreateJobDto){
+        console.log(process.env.NODE_ENV)
         return this.jobsService.createJob(data);
     }
 }

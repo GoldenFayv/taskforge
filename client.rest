@@ -11,9 +11,21 @@ Content-Type: application/json
       "message": "I love my life",
       "recipient": "love@life.com"
    },
-   "priority": "LOW"
+   # "priority": "LOW"
+   # "priority": "NORMAL"
+   "priority": "HIGH"
 }
 
 ###
 GET {{url}}/jobs/deadletters
 Accept: application/json
+
+###
+GET {{url}}/jobs/deadletters/cmt4g2iwj0000k4pwd0qvhru1
+Accept: application/json
+
+###
+DELETE  {{url}}/jobs/deadletters/cmt46kund0000p3pwvsxdkiph/retry
+
+Accept: application/json
+Content-Type: application/json

@@ -5,19 +5,32 @@ import { LoggerService } from "src/logger.service";
 import { MailService } from "src/mail/mail.service";
 import { PrismaService } from "src/prisma/prisma.service";
 import { MoveToDeadLetter } from "./move-to-dead-letter.action";
+import { EmailJobHandler } from "../handler/email-handler.interface";
 
-@Processor('jobs')
+@Processor('jobs', {
+    concurrency: 5 //a worker can process 5 tasks at a time (depends on your infracture though)
+})
 export class ProcessJobs extends WorkerHost {
+    private readonly handlers: Map<string, any>
     constructor(
         private logger: LoggerService,
         private prismaService: PrismaService,
-        private mailService: MailService,
-        private moveToDeadLetter: MoveToDeadLetter
-    ) { super() }
+        private moveToDeadLetter: MoveToDeadLetter,
+        private emailHandler: EmailJobHandler,
+    ) {
+        super()
+        this.handlers = new Map([
+            [emailHandler.type, emailHandler],
+        ]);
+    }
 
     async process(job: Job) {
         const jobId = job.data.id;
-
+        // if (process.env.NODE_ENV === 'development') {
+        //     console.log(`START ${job.id}`);
+        //     await new Promise(resolve => setTimeout(resolve, 5000));
+        //     console.log(`FINISH ${job.id}`);
+        // }
         await this.prismaService.job.update({
             where: { id: jobId },
             data: {
@@ -26,18 +39,14 @@ export class ProcessJobs extends WorkerHost {
             }
         });
 
-        this.logger.log(`Processing job: ${job.id}`);
-        this.logger.log(`Job name: ${job.name}`);
-        this.logger.log(`Job data: ${JSON.stringify(job.data)}`);
+        const handler = this.handlers.get(job.name)
 
-        switch (job.name) {
-            case JobType.EMAIL:
-                await this.mailService.sendMail(job.data)
-                break;
-
-            default:
-                break;
+        if (!handler) {
+            throw new Error(`Unsupported job type: ${job.name}`);
         }
+
+        await handler.handle(job);
+
         return true;
     }
 

@@ -10,5 +10,7 @@ export class DeadLetterController {
     }
 
     @Get('/:id')
-    async show(@Param('id') id: string){}
+    async show(@Param('id') id: string){
+        return this.deadLetterService.findOneDeadLetter(id);
+    }
 }

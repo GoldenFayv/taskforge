@@ -1,5 +1,4 @@
 import { Injectable } from "@nestjs/common";
-import { DeadLetterJob, JobStatus } from "src/generated/prisma/client";
 import { DeadLetterJobGetPayload } from "src/generated/prisma/models";
 import { QueueService } from "src/queue/queue.service";
 
