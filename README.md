@@ -439,6 +439,9 @@ npx prisma studio
 * Exponential backoff
 * Dead-letter jobs
 * Manual dead-letter retry
+* Scheduled jobs
+* Delayed Jobs
+* Cancellation of waiting/delayed jobs
 
 ## Roadmap
 * Job priorities

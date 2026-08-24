@@ -13,6 +13,7 @@ import { DeadLetterController } from './dead-letter.controller';
 import { RetryDeadLetter } from './action/retry-dead-letter.action';
 import { RetryDeadLetterController } from './retry-dead-letter.controller';
 import { EmailJobHandler } from './handler/email-handler.interface';
+import { CancelJobController } from './cancel-job.controller';
 
 @Module({
     imports: [
@@ -22,7 +23,8 @@ import { EmailJobHandler } from './handler/email-handler.interface';
     controllers: [
         JobsController,
         DeadLetterController,
-        RetryDeadLetterController
+        RetryDeadLetterController,
+        CancelJobController
     ],
     providers: [
         JobsService,

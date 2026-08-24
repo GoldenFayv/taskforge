@@ -11,9 +11,17 @@ Content-Type: application/json
       "message": "I love my life",
       "recipient": "love@life.com"
    },
-   # "priority": "LOW"
-   # "priority": "NORMAL"
-   "priority": "HIGH"
+   "priority": "LOW"
+   # "scheduledAt": "2026-08-25T14:30:00.000Z"
+}
+
+### Get Jobs
+GET {{url}}/jobs
+Accept: application/json
+Content-Type: application/json
+
+{
+   "take": 1
 }
 
 ###
@@ -29,3 +37,7 @@ DELETE  {{url}}/jobs/deadletters/cmt46kund0000p3pwvsxdkiph/retry
 
 Accept: application/json
 Content-Type: application/json
+
+### Cancel Job
+POST {{url}}/jobs/808611e6-c343-4773-b461-79b000402bd8/cancel
+Accept: application/json

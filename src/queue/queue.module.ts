@@ -5,9 +5,9 @@ import { LoggerService } from 'src/logger.service';
 
 @Module({
     imports: [
-    BullModule.registerQueue({name: "jobs"}),
+        BullModule.registerQueue({ name: "jobs" }),
     ],
-    providers: [QueueService],
+    providers: [QueueService, LoggerService],
     exports: [QueueService]
 })
 export class QueueModule { }

@@ -1,4 +1,4 @@
-import { ArrayNotEmpty, IsArray, isEnum, IsEnum, IsIn, IsNotEmpty, IsObject, IsString } from "class-validator";
+import { IsDateString, IsEnum, IsNotEmpty, IsNumberString, IsObject, IsOptional, IsString } from "class-validator";
 import { JobPriority, JobType } from "src/generated/prisma/enums";
 
 export class CreateJobDto {
@@ -12,4 +12,16 @@ export class CreateJobDto {
 
     @IsEnum(JobPriority)
     priority!: JobPriority
+
+    @IsDateString({ strict: true })
+    @IsOptional()
+    scheduledAt?: string;
+
+    @IsString()
+    @IsOptional()
+    idempotencyKey?: string;
+
+    @IsString()
+    @IsOptional()
+    idempotencyBodyHash?: string
 }

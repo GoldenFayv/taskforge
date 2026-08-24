@@ -1,12 +1,16 @@
 
 model Job{
  id String @id @default(uuid())
+ idempotencyKey String? @unique
+ idempotencyBodyHash String?
  type JobType
   payload Json
   status JobStatus @default(PENDING)
   priority JobPriority @default(LOW)
   attempts Int @default(0)
-  createAt DateTime @default(now())
+  scheduledAt DateTime? @default(now())
+  enqueuedAt DateTime?
+  createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   deadLetterJob DeadLetterJob?

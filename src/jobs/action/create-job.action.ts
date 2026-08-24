@@ -9,8 +9,10 @@ export class CreateJob {
     async handle(validatedData: CreateJobDto) {
         return await this.prismaService.job.create({
             data: {
-                type: validatedData.type,
-                payload: validatedData.payload,
+                // type: validatedDa÷ta.type,
+                // payload: validatedData.payload,
+                scheduledAt: validatedData.scheduledAt ? new Date(validatedData.scheduledAt) : new Date(),
+                ...validatedData
             },
         });
     }
