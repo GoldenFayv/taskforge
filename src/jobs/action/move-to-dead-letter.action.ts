@@ -13,7 +13,7 @@ export class MoveToDeadLetter {
                 jobId,
                 type: job.name,
                 payload: job.data.payload,
-                error: error.message,
+                error: error instanceof Error? error.message: String(error),
                 attempts: job.attemptsMade,
             }
         })

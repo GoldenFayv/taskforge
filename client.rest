@@ -3,6 +3,7 @@
 POST {{url}}/jobs
 Accept: application/json
 Content-Type: application/json
+idempotency-key: ejsus-79b
 
 {
    "type": "EMAIL",
@@ -12,7 +13,6 @@ Content-Type: application/json
       "recipient": "love@life.com"
    },
    "priority": "LOW"
-   # "scheduledAt": "2026-08-25T14:30:00.000Z"
 }
 
 ### Get Jobs
@@ -23,6 +23,11 @@ Content-Type: application/json
 {
    "take": 1
 }
+
+### Get Single Job
+GET {{url}}/jobs/379aecc9-613c-4f28-ac81-194be6a59e9b
+Accept: application/json
+Content-Type: application/json
 
 ###
 GET {{url}}/jobs/deadletters

@@ -42,6 +42,10 @@ redis-server --version
 git clone <repository-url>
 ```
 
+```bash
+pgrep -af "nest|<root-folder-name>" 
+```
+
 Navigate into the project:
 
 ```bash
@@ -442,6 +446,9 @@ npx prisma studio
 * Scheduled jobs
 * Delayed Jobs
 * Cancellation of waiting/delayed jobs
+* Idempotency
+* Rate limiting
+* Job history
 
 ## Roadmap
 * Job priorities

@@ -14,6 +14,7 @@ import { RetryDeadLetter } from './action/retry-dead-letter.action';
 import { RetryDeadLetterController } from './retry-dead-letter.controller';
 import { EmailJobHandler } from './handler/email-handler.interface';
 import { CancelJobController } from './cancel-job.controller';
+import { JobExecutionService } from './job-execution.service';
 
 @Module({
     imports: [
@@ -35,8 +36,8 @@ import { CancelJobController } from './cancel-job.controller';
         MoveToDeadLetter,
         DeadLetterService,
         RetryDeadLetter,
-        EmailJobHandler
-
+        EmailJobHandler,
+        JobExecutionService
     ]
 })
 export class JobsModule { }

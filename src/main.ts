@@ -11,7 +11,7 @@ async function bootstrap() {
     // whitelist
   }));
   app.useGlobalInterceptors(new TransformInterceptor())
-
+  app.enableShutdownHooks();
   await app.listen(process.env.PORT ?? 4000);
 }
 bootstrap();

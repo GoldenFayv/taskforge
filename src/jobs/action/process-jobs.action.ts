@@ -1,12 +1,14 @@
 import { OnWorkerEvent, Processor, WorkerHost } from "@nestjs/bullmq";
 import { Job } from "bullmq";
-import { JobStatus } from "src/generated/prisma/enums";
+import { JobExecutionStatus, JobStatus } from "src/generated/prisma/enums";
 import { LoggerService } from "src/logger.service";
 import { PrismaService } from "src/prisma/prisma.service";
 import { EmailJobHandler } from "../handler/email-handler.interface";
 import { MoveToDeadLetter } from "./move-to-dead-letter.action";
 import { QueueService } from "src/queue/queue.service";
 import { JobsService } from "../jobs.service";
+import { JobExecutionService } from "../job-execution.service";
+import { Prisma } from "src/generated/prisma/client";
 
 @Processor('jobs', {
     concurrency: 5, //a worker can process 5 tasks at a time (depends on your infracture though)
@@ -15,6 +17,7 @@ import { JobsService } from "../jobs.service";
         duration: 60_000,
     },
 })
+
 export class ProcessJobs extends WorkerHost {
     private readonly handlers: Map<string, any>
     constructor(
@@ -23,7 +26,8 @@ export class ProcessJobs extends WorkerHost {
         private moveToDeadLetter: MoveToDeadLetter,
         private emailHandler: EmailJobHandler,
         private queueService: QueueService,
-        private jobService: JobsService
+        private jobService: JobsService,
+        private jobXService: JobExecutionService
     ) {
         super()
         this.handlers = new Map([
@@ -33,33 +37,55 @@ export class ProcessJobs extends WorkerHost {
 
     async process(job: Job) {
         const jobId = job.data.id;
-        // if (process.env.NODE_ENV === 'development') {
-        //     console.log(`START ${job.id}`);
-        //     await new Promise(resolve => setTimeout(resolve, 5000));
-        //     console.log(`FINISH ${job.id}`);
-        // }
-        await this.prismaService.job.update({
+        const startedAt = new Date()
+        const attempt = job.attemptsMade + 1;
+
+        const jobDb = await this.prismaService.job.update({
             where: { id: jobId },
             data: {
                 status: JobStatus.PROCESSING,
-                attempts: job.attemptsMade
+                attempts: attempt
             }
         });
 
-        const handler = this.handlers.get(job.name)
+        const data = { startedAt, attempt: attempt, status: JobExecutionStatus.PROCESSING };
 
-        if (!handler) {
-            throw new Error(`Unsupported job type: ${job.name}`);
+        const jobX = await this.jobXService.createJobX(jobDb, data)
+
+        console.log(`STARTING JOB ${job.data.id}`)
+
+        await new Promise(resolve => setTimeout(resolve, 120_000));
+
+        console.log(`FINISHED JOB ${job.data.id}`);
+
+
+
+        try {
+            const handler = this.handlers.get(job.name)
+
+            if (!handler) {
+                throw new Error(`Unsupported job type: ${job.name}`);
+            }
+
+            await handler.handle(job);
+
+            const completedAt = new Date()
+
+            await this.jobXService.updateJobX(jobX.id, { completedAt: completedAt, status: JobExecutionStatus.COMPLETED, durationMs: completedAt.getTime() - jobX.startedAt.getTime() })
+
+            return true;
+        } catch (error) {
+            const completedAt = new Date()
+
+            await this.jobXService.updateJobX(jobX.id, { completedAt: completedAt, status: JobExecutionStatus.FAILED, durationMs: completedAt.getTime() - jobX.startedAt.getTime(), error: error instanceof Error ? error.message : String(error), })
+
+            throw error;
         }
-
-        await handler.handle(job);
-
-        return true;
     }
 
     @OnWorkerEvent('completed')
     async onCompleted(job: Job) {
-        const jobId = job.data.id;
+        const jobId = job.id
 
         await this.prismaService.job.update({
             where: { id: jobId },
@@ -72,38 +98,48 @@ export class ProcessJobs extends WorkerHost {
         this.logger.log(`Job completed: ${jobId}`);
     }
 
-    @OnWorkerEvent("failed")
+    @OnWorkerEvent('failed')
     async onFailed(job: Job, error: Error) {
-        const jobId = job.data.id
+        const jobId = job.data.id;
 
         const isFinalAttempt = job.attemptsMade >= (job.opts.attempts ?? 1);
 
-        if (!isFinalAttempt) {
+        try {
+            if (!isFinalAttempt) {
+                await this.prismaService.job.update({
+                    where: { id: jobId },
+                    data: { status: JobStatus.RETRYING, attempts: job.attemptsMade },
+                });
+                return;
+            }
+
             await this.prismaService.job.update({
                 where: { id: jobId },
-                data: {
-                    status: JobStatus.RETRYING,
-                    attempts: job.attemptsMade
-                },
+                data: { status: JobStatus.FAILED, attempts: job.attemptsMade },
             });
-
-            return;
+        } catch (err) {
+            if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+                this.logger.error(`Job ${jobId} not found in DB during onFailed — skipping DB update`);
+                return; // job row is gone; nothing more to update
+            }
+            throw err;
         }
-
-        await this.prismaService.job.update({
-            where: { id: jobId },
-            data: {
-                status: JobStatus.FAILED,
-                attempts: job.attemptsMade
-            },
-        });
 
         const jobDb = await this.jobService.findOneJob(jobId)
 
+        await this.queueService.removeQueue(jobDb)
+
         await this.moveToDeadLetter.handle(job, error)
 
-        this.queueService.removeQueue(jobDb)
-
         this.logger.log(`Job ${jobId} moved to dead letter queue`);
+    }
+
+    @OnWorkerEvent('stalled')
+    async onStalled(jobId: string) {
+        const bullJob = await this.queueService.getAQueue(jobId)
+
+        const dbJobId = bullJob.data.id;
+
+        await this.jobXService.markLatestAsAbandoned(dbJobId);
     }
 }

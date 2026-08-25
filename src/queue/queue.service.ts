@@ -33,8 +33,8 @@ export class QueueService {
         }
     }
 
-    async getAQueue(job: Job) {
-        const queue = await this.myQueue.getJob(job.id)
+    async getAQueue(jobId: string) {
+        const queue = await this.myQueue.getJob(jobId)
 
         if (!queue) {
             throw new NotFoundException("Queue not there")
@@ -44,11 +44,11 @@ export class QueueService {
     }
 
     async removeQueue(job: Job): Promise<void> {
-        const bullJob = await this.getAQueue(job);
-        const removableStates = ['waiting', 'delayed'];
+        const bullJob = await this.getAQueue(job.id);
+        const nonRemovableStates = ['waiting', 'delayed'];
         const state = await bullJob.getState();
 
-        if (!removableStates.includes(state)) {
+        if (nonRemovableStates.includes(state)) {
             throw new ConflictException(`Cannot remove job in state "${state}"`);
         }
 

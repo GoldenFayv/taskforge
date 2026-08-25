@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `JobExecution` MODIFY `status` ENUM('PROCESSING', 'FAILED', 'COMPLETED', 'ABANDONED') NOT NULL;

@@ -1,0 +1,26 @@
+model JobExecution {
+    id String @id @default(cuid())
+
+    jobId   String
+    attempt Int
+
+    status JobExecutionStatus
+
+    error       String?
+    startedAt   DateTime
+    completedAt DateTime?
+    durationMs  Int?
+
+    createdAt DateTime @default(now())
+
+    job Job @relation(fields: [jobId], references: [id])
+
+    @@index([jobId])
+}
+
+enum JobExecutionStatus {
+    PROCESSING
+    FAILED
+    COMPLETED
+    ABANDONED
+}
